@@ -1,0 +1,70 @@
+name: Deploy to Komuta
+description: Start a Komuta deploy (build from source or a ready-made image) and wait for the result.
+branding:
+  icon: upload-cloud
+  color: blue
+inputs:
+  token:
+    description: Komuta deploy token (kmtd_...). Leave empty to sign in with the workflow's OIDC identity (needs permissions id-token write and a deploy token trusting this repository).
+    default: ''
+
+  service-id:
+    description: Komuta service id.
+    required: true
+  mode:
+    description: build (Komuta builds the ref) or image (deploy a ready-made image).
+    default: build
+  ref:
+    description: Branch or tag to build. Defaults to the pushed ref.
+    default: ${{ github.ref_name }}
+  sha:
+    description: Exact commit to build (optional).
+    default: ''
+  image:
+    description: Image pinned by digest (repo@sha256:...) for image mode.
+    default: ''
+  wait:
+    description: Wait for the deploy to finish and fail the job if it fails.
+    default: 'true'
+  timeout:
+    description: Seconds to wait before giving up.
+    default: '1800'
+  api-url:
+    description: Komuta API base URL.
+    default: https://api.komuta.io
+outputs:
+  deployment-id:
+    description: Komuta deployment id.
+    value: ${{ steps.deploy.outputs.deployment-id }}
+  status:
+    description: Last observed deploy status.
+    value: ${{ steps.deploy.outputs.status }}
+  console-url:
+    description: Link to the deploy in the Komuta console.
+    value: ${{ steps.deploy.outputs.console-url }}
+runs:
+  using: composite
+  steps:
+    - id: deploy
+      shell: bash
+      env:
+        KOMUTA_DEPLOY_TOKEN: ${{ inputs.token }}
+        KOMUTA_CI_PROVIDER: github-actions
+        KOMUTA_CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        KOMUTA_CI_ACTOR: ${{ github.actor }}
+        INPUT_SERVICE: ${{ inputs.service-id }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_REF: ${{ inputs.ref }}
+        INPUT_SHA: ${{ inputs.sha }}
+        INPUT_IMAGE: ${{ inputs.image }}
+        INPUT_WAIT: ${{ inputs.wait }}
+        INPUT_TIMEOUT: ${{ inputs.timeout }}
+        INPUT_API_URL: ${{ inputs.api-url }}
+        CLIENT_REQUEST_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+      run: |
+        args=(--service "$INPUT_SERVICE" --mode "$INPUT_MODE" --timeout "$INPUT_TIMEOUT" --api-url "$INPUT_API_URL" --client-request-id "$CLIENT_REQUEST_ID")
+        [ -n "$INPUT_REF" ] && args+=(--ref "$INPUT_REF")
+        [ -n "$INPUT_SHA" ] && args+=(--sha "$INPUT_SHA")
+        [ -n "$INPUT_IMAGE" ] && args+=(--image "$INPUT_IMAGE")
+        [ "$INPUT_WAIT" = "true" ] && args+=(--wait) || args+=(--no-wait)
+        "$GITHUB_ACTION_PATH/komuta-deploy.sh" "${args[@]}"

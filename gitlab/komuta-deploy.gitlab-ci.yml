@@ -1,0 +1,20 @@
+.komuta-deploy:
+  image: alpine:3.20
+  id_tokens:
+    KOMUTA_ID_TOKEN:
+      aud: https://api.komuta.io
+  variables:
+    KOMUTA_MODE: build
+    KOMUTA_WAIT: "true"
+    KOMUTA_TIMEOUT: "1800"
+  before_script:
+    - apk add --no-cache bash curl jq >/dev/null
+    - curl -fsSL -o /usr/local/bin/komuta-deploy https://raw.githubusercontent.com/Microzon-Tech/komuta-deploy-action/v1/komuta-deploy.sh
+    - chmod +x /usr/local/bin/komuta-deploy
+  script:
+    - export KOMUTA_CI_PROVIDER=gitlab-ci KOMUTA_CI_RUN_URL="$CI_PIPELINE_URL" KOMUTA_CI_ACTOR="$GITLAB_USER_LOGIN"
+    - >
+      komuta-deploy --service "$KOMUTA_SERVICE_ID" --mode "$KOMUTA_MODE"
+      --ref "${KOMUTA_REF:-$CI_COMMIT_REF_NAME}" ${KOMUTA_IMAGE:+--image "$KOMUTA_IMAGE"}
+      --client-request-id "$CI_PIPELINE_ID-$CI_JOB_ID" --timeout "$KOMUTA_TIMEOUT"
+      $( [ "$KOMUTA_WAIT" = "true" ] && echo --wait )
